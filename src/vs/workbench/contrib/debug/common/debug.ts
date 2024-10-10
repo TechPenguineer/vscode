@@ -164,6 +164,7 @@ export interface IExpressionValue {
 
 export interface IExpressionContainer extends ITreeElement, IExpressionValue {
 	readonly hasChildren: boolean;
+	getSession(): IDebugSession | undefined;
 	evaluateLazy(): Promise<void>;
 	getChildren(): Promise<IExpression[]>;
 	readonly reference?: number;
@@ -411,8 +412,10 @@ export interface IDebugSession extends ITreeElement {
 	readonly onDidChangeState: Event<void>;
 	readonly onDidChangeReplElements: Event<IReplElement | undefined>;
 
-	// DA capabilities
+	/** DA capabilities. Set only when there is a running session available. */
 	readonly capabilities: DebugProtocol.Capabilities;
+	/** DA capabilities. These are retained on the session even after is implementation ends. */
+	readonly rememberedCapabilities?: DebugProtocol.Capabilities;
 
 	// DAP events
 
@@ -626,7 +629,7 @@ export interface IBreakpoint extends IBaseBreakpoint {
 	readonly pending: boolean;
 
 	/** Marks that a session did trigger the breakpoint. */
-	setSessionDidTrigger(sessionId: string): void;
+	setSessionDidTrigger(sessionId: string, didTrigger?: boolean): void;
 	/** Gets whether the `triggeredBy` condition has been met in the given sesison ID. */
 	getSessionDidTrigger(sessionId: string): boolean;
 
@@ -911,7 +914,6 @@ export interface IDebugAdapterInlineImpl extends IDisposable {
 
 export interface IDebugAdapterImpl {
 	readonly type: 'implementation';
-	readonly implementation: IDebugAdapterInlineImpl;
 }
 
 export type IAdapterDescriptor = IDebugAdapterExecutable | IDebugAdapterServer | IDebugAdapterNamedPipeServer | IDebugAdapterImpl;
