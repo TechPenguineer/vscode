@@ -1855,6 +1855,7 @@ export class InlineSuggestionList implements vscode.InlineCompletionList {
 
 export interface PartialAcceptInfo {
 	kind: PartialAcceptTriggerKind;
+	acceptedLength: number;
 }
 
 export enum PartialAcceptTriggerKind {
@@ -2168,7 +2169,6 @@ export class TerminalCompletionItem implements vscode.TerminalCompletionItem {
 	}
 }
 
-
 /**
  * Represents a collection of {@link CompletionItem completion items} to be presented
  * in the editor.
@@ -2201,7 +2201,6 @@ export interface TerminalResourceRequestConfig {
 	filesRequested?: boolean;
 	foldersRequested?: boolean;
 	cwd?: vscode.Uri;
-	pathSeparator: string;
 }
 
 export enum TaskRevealKind {
@@ -4640,6 +4639,22 @@ export class ChatResponseTextEditPart implements vscode.ChatResponseTextEditPart
 	}
 }
 
+export class ChatResponseNotebookEditPart implements vscode.ChatResponseNotebookEditPart {
+	uri: vscode.Uri;
+	edits: vscode.NotebookEdit[];
+	isDone?: boolean;
+	constructor(uri: vscode.Uri, editsOrDone: vscode.NotebookEdit | vscode.NotebookEdit[] | true) {
+		this.uri = uri;
+		if (editsOrDone === true) {
+			this.isDone = true;
+			this.edits = [];
+		} else {
+			this.edits = Array.isArray(editsOrDone) ? editsOrDone : [editsOrDone];
+
+		}
+	}
+}
+
 export class ChatRequestTurn implements vscode.ChatRequestTurn {
 	constructor(
 		readonly prompt: string,
@@ -4898,6 +4913,9 @@ export class LanguageModelToolResult {
 			content: this.content,
 		};
 	}
+}
+
+export class ExtendedLanguageModelToolResult extends LanguageModelToolResult {
 }
 
 export enum LanguageModelChatToolMode {

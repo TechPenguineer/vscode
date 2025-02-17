@@ -512,7 +512,11 @@ export class ChatService extends Disposable implements IChatService {
 		for (let i = requests.length - 1; i >= 0; i -= 1) {
 			const request = requests[i];
 			if (request.shouldBeRemovedOnSend) {
-				this.removeRequest(sessionId, request.id);
+				if (request.shouldBeRemovedOnSend.afterUndoStop) {
+					request.response?.finalizeUndoState();
+				} else {
+					this.removeRequest(sessionId, request.id);
+				}
 			}
 		}
 
@@ -639,7 +643,7 @@ export class ChatService extends Disposable implements IChatService {
 							variableData = chatRequest.variableData;
 							message = getPromptText(request.message).message;
 						} else {
-							variableData = await this.chatVariablesService.resolveVariables(parsedRequest, request.attachedContext, model, progressCallback, token);
+							variableData = this.chatVariablesService.resolveVariables(parsedRequest, request.attachedContext);
 							for (const variable of variableData.variables) {
 								if (request.workingSet && variable.isFile && URI.isUri(variable.value)) {
 									request.workingSet.push(variable.value);
@@ -832,10 +836,8 @@ export class ChatService extends Disposable implements IChatService {
 				// 'range' is range within the prompt text
 				if (v.isTool) {
 					return 'toolInPrompt';
-				} else if (v.isDynamic) {
-					return 'fileInPrompt';
 				} else {
-					return 'variableInPrompt';
+					return 'fileInPrompt';
 				}
 			} else if (v.kind === 'command') {
 				return 'command';
@@ -847,7 +849,7 @@ export class ChatService extends Disposable implements IChatService {
 				return 'directory';
 			} else if (v.isTool) {
 				return 'tool';
-			} else if (v.isDynamic) {
+			} else {
 				if (URI.isUri(v.value)) {
 					return 'file';
 				} else if (isLocation(v.value)) {
@@ -855,8 +857,6 @@ export class ChatService extends Disposable implements IChatService {
 				} else {
 					return 'otherAttachment';
 				}
-			} else {
-				return 'variableAttachment';
 			}
 		});
 	}
