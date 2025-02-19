@@ -461,7 +461,7 @@ export abstract class ViewPane extends Pane implements IView {
 		this.toolbar = this.instantiationService.createInstance(WorkbenchToolBar, actions, {
 			orientation: ActionsOrientation.HORIZONTAL,
 			actionViewItemProvider: (action, options) => {
-				const item = this.getActionViewItem(action, options);
+				const item = this.createActionViewItem(action, options);
 				if (item) {
 					this.headerActionViewItems.set(item.action.id, item);
 				}
@@ -581,10 +581,12 @@ export abstract class ViewPane extends Pane implements IView {
 			this.titleContainerHover?.update(calculatedTitle);
 		}
 
+		const ariaLabel = this._getAriaLabel(calculatedTitle);
 		if (this.iconContainer) {
 			this.iconContainerHover?.update(calculatedTitle);
-			this.iconContainer.setAttribute('aria-label', this._getAriaLabel(calculatedTitle));
+			this.iconContainer.setAttribute('aria-label', ariaLabel);
 		}
+		this.ariaHeaderLabel = this.getAriaHeaderLabel(ariaLabel);
 
 		this._title = title;
 		this._onDidChangeTitleArea.fire();
@@ -695,7 +697,7 @@ export abstract class ViewPane extends Pane implements IView {
 		this._onDidChangeTitleArea.fire();
 	}
 
-	getActionViewItem(action: IAction, options?: IDropdownMenuActionViewItemOptions): IActionViewItem | undefined {
+	createActionViewItem(action: IAction, options?: IDropdownMenuActionViewItemOptions): IActionViewItem | undefined {
 		if (action.id === VIEWPANE_FILTER_ACTION.id) {
 			const that = this;
 			return new class extends BaseActionViewItem {

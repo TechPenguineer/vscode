@@ -1392,7 +1392,7 @@ export class Repository {
 		}
 
 		const { mode, object, size } = elements[0];
-		return { mode, object, size: parseInt(size) };
+		return { mode, object, size: parseInt(size) || 0 };
 	}
 
 	async lstree(treeish: string, path?: string): Promise<LsTreeElement[]> {
@@ -1894,16 +1894,6 @@ export class Repository {
 
 	async mergeAbort(): Promise<void> {
 		await this.exec(['merge', '--abort']);
-	}
-
-	async mergeContinue(): Promise<void> {
-		const args = ['merge', '--continue'];
-
-		try {
-			await this.exec(args, { env: { GIT_EDITOR: 'true' } });
-		} catch (commitErr) {
-			await this.handleCommitError(commitErr);
-		}
 	}
 
 	async tag(options: { name: string; message?: string; ref?: string }): Promise<void> {

@@ -161,6 +161,8 @@ export interface IChatListItemRendererOptions {
 	readonly renderCodeBlockPills?: boolean;
 	readonly renderDetectedCommandsWithRequest?: boolean;
 	readonly renderTextEditsAsSummary?: (uri: URI) => boolean;
+	readonly referencesExpandedWhenEmptyResponse?: boolean;
+	readonly progressMessageAtBottomOfResponse?: boolean;
 }
 
 export interface IChatWidgetViewOptions {

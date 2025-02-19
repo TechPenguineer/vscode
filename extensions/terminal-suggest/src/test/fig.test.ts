@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { testPaths, type ISuiteSpec } from './helpers';
-
+const expectedCompletions = [{ label: 'foo', description: 'Foo' }];
 export const figGenericTestSuites: ISuiteSpec[] = [
 	{
 		name: 'Fig name and description only',
@@ -17,10 +17,10 @@ export const figGenericTestSuites: ISuiteSpec[] = [
 		availableCommands: 'foo',
 		testSpecs: [
 			// Typing a path
-			{ input: '|', expectedCompletions: ['foo'], expectedResourceRequests: { type: 'both', cwd: testPaths.cwd } },
-			{ input: 'f|', expectedCompletions: ['foo'], expectedResourceRequests: { type: 'both', cwd: testPaths.cwd } },
-			{ input: 'fo|', expectedCompletions: ['foo'], expectedResourceRequests: { type: 'both', cwd: testPaths.cwd } },
-			{ input: 'foo|', expectedCompletions: ['foo'], expectedResourceRequests: { type: 'both', cwd: testPaths.cwd } },
+			{ input: '|', expectedCompletions, expectedResourceRequests: { type: 'both', cwd: testPaths.cwd } },
+			{ input: 'f|', expectedCompletions, expectedResourceRequests: { type: 'both', cwd: testPaths.cwd } },
+			{ input: 'fo|', expectedCompletions, expectedResourceRequests: { type: 'both', cwd: testPaths.cwd } },
+			{ input: 'foo|', expectedCompletions, expectedResourceRequests: { type: 'both', cwd: testPaths.cwd } },
 
 			// Basic arguments (fallback)
 			{ input: 'foo |', expectedCompletions: [], expectedResourceRequests: { type: 'both', cwd: testPaths.cwd } }
@@ -93,9 +93,8 @@ export const figGenericTestSuites: ISuiteSpec[] = [
 		testSpecs: [
 			{ input: 'foo |', expectedCompletions: ['--bar', '--baz'] },
 			{ input: 'foo bar|', expectedCompletions: ['--bar', '--baz'] },
-			// TODO: Duplicate options should not be presented https://github.com/microsoft/vscode/issues/239607
-			// { input: 'foo --bar |', expectedCompletions: ['--baz'] },
-			// { input: 'foo --baz |', expectedCompletions: ['--bar'] },
+			{ input: 'foo --bar |', expectedCompletions: ['--baz'] },
+			{ input: 'foo --baz |', expectedCompletions: ['--bar'] },
 		]
 	},
 	{
@@ -124,10 +123,9 @@ export const figGenericTestSuites: ISuiteSpec[] = [
 		testSpecs: [
 			{ input: 'foo |', expectedCompletions: ['--bar'] },
 			{ input: 'foo --bar |', expectedCompletions: ['a', 'b', 'c'] },
-			// TODO: All options should be suggested here? https://github.com/microsoft/vscode/issues/239713
-			// { input: 'foo --bar a|', expectedCompletions: ['a', 'b', 'c'] },
-			// { input: 'foo --bar b|', expectedCompletions: ['a', 'b', 'c'] },
-			// { input: 'foo --bar c|', expectedCompletions: ['a', 'b', 'c'] },
+			{ input: 'foo --bar a|', expectedCompletions: ['a', 'b', 'c'] },
+			{ input: 'foo --bar b|', expectedCompletions: ['a', 'b', 'c'] },
+			{ input: 'foo --bar c|', expectedCompletions: ['a', 'b', 'c'] },
 		]
 	}
 ];

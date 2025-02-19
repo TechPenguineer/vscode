@@ -233,7 +233,7 @@ export class ChatWidget extends Disposable implements IChatWidget {
 		@ILogService private readonly logService: ILogService,
 		@IThemeService private readonly themeService: IThemeService,
 		@IChatSlashCommandService private readonly chatSlashCommandService: IChatSlashCommandService,
-		@IChatEditingService private readonly chatEditingService: IChatEditingService,
+		@IChatEditingService chatEditingService: IChatEditingService,
 		@IStorageService private readonly storageService: IStorageService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 		@IProductService private readonly productService: IProductService,
@@ -593,10 +593,11 @@ export class ChatWidget extends Disposable implements IChatWidget {
 							// Re-render once content references are loaded
 							(isResponseVM(element) ? `_${element.contentReferences.length}` : '') +
 							// Re-render if element becomes hidden due to undo/redo
-							`_${element.shouldBeRemovedOnSend ? '1' : '0'}` +
+							`_${element.shouldBeRemovedOnSend ? `${element.shouldBeRemovedOnSend.afterUndoStop || '1'}` : '0'}` +
 							// Rerender request if we got new content references in the response
 							// since this may change how we render the corresponding attachments in the request
-							(isRequestVM(element) && element.contentReferences ? `_${element.contentReferences?.length}` : '');
+							(isRequestVM(element) && element.contentReferences ? `_${element.contentReferences?.length}` : '') +
+							(isResponseVM(element) && element.model.isPaused.get() ? '_paused' : '');
 					},
 				}
 			});
@@ -921,6 +922,7 @@ export class ChatWidget extends Disposable implements IChatWidget {
 
 	togglePaused() {
 		this.viewModel?.model.toggleLastRequestPaused();
+		this.onDidChangeItems();
 	}
 
 	setModel(model: IChatModel, viewState: IChatViewState): void {
@@ -1116,7 +1118,6 @@ export class ChatWidget extends Disposable implements IChatWidget {
 						editingSessionAttachedContext.push(this.attachmentModel.asVariableEntry(uri, undefined, isMarkedReadonly));
 					}
 				}
-				let maximumFileEntries = this.chatEditingService.editingSessionFileLimit - editingSessionAttachedContext.length;
 
 				// Then take any attachments that are not files
 				for (const attachment of this.attachmentModel.attachments) {
@@ -1143,12 +1144,11 @@ export class ChatWidget extends Disposable implements IChatWidget {
 				const previousRequests = this.viewModel.model.getRequests();
 				for (const request of previousRequests) {
 					for (const variable of request.variableData.variables) {
-						if (URI.isUri(variable.value) && variable.isFile && maximumFileEntries > 0) {
+						if (URI.isUri(variable.value) && variable.isFile) {
 							const uri = variable.value;
 							if (!uniqueWorkingSetEntries.has(uri) && !promptInstructionUris.has(uri)) {
 								editingSessionAttachedContext.push(variable);
 								uniqueWorkingSetEntries.add(variable.value);
-								maximumFileEntries -= 1;
 							}
 						}
 					}
@@ -1198,12 +1198,6 @@ export class ChatWidget extends Disposable implements IChatWidget {
 						}
 					}
 				});
-
-				const RESPONSE_TIMEOUT = 20000;
-				setTimeout(() => {
-					// Stop the signal if the promise is still unresolved
-					this.chatAccessibilityService.acceptResponse(undefined, requestId, options?.isVoiceInput);
-				}, RESPONSE_TIMEOUT);
 
 				return result.responseCreatedPromise;
 			}

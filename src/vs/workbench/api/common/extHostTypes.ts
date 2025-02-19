@@ -1855,6 +1855,7 @@ export class InlineSuggestionList implements vscode.InlineCompletionList {
 
 export interface PartialAcceptInfo {
 	kind: PartialAcceptTriggerKind;
+	acceptedLength: number;
 }
 
 export enum PartialAcceptTriggerKind {
@@ -2147,7 +2148,7 @@ export enum TerminalCompletionItemKind {
 }
 
 export class TerminalCompletionItem implements vscode.TerminalCompletionItem {
-	label: string;
+	label: string | CompletionItemLabel;
 	icon?: ThemeIcon | undefined;
 	detail?: string | undefined;
 	isFile?: boolean | undefined;
@@ -2156,7 +2157,7 @@ export class TerminalCompletionItem implements vscode.TerminalCompletionItem {
 	replacementIndex: number;
 	replacementLength: number;
 
-	constructor(label: string, icon?: ThemeIcon, detail?: string, isFile?: boolean, isDirectory?: boolean, isKeyword?: boolean, replacementIndex?: number, replacementLength?: number) {
+	constructor(label: string | CompletionItemLabel, icon?: ThemeIcon, detail?: string, isFile?: boolean, isDirectory?: boolean, isKeyword?: boolean, replacementIndex?: number, replacementLength?: number) {
 		this.label = label;
 		this.icon = icon;
 		this.detail = detail;
@@ -2167,7 +2168,6 @@ export class TerminalCompletionItem implements vscode.TerminalCompletionItem {
 		this.replacementLength = replacementLength ?? 0;
 	}
 }
-
 
 /**
  * Represents a collection of {@link CompletionItem completion items} to be presented
@@ -2201,7 +2201,6 @@ export interface TerminalResourceRequestConfig {
 	filesRequested?: boolean;
 	foldersRequested?: boolean;
 	cwd?: vscode.Uri;
-	pathSeparator: string;
 }
 
 export enum TaskRevealKind {
@@ -4640,6 +4639,22 @@ export class ChatResponseTextEditPart implements vscode.ChatResponseTextEditPart
 	}
 }
 
+export class ChatResponseNotebookEditPart implements vscode.ChatResponseNotebookEditPart {
+	uri: vscode.Uri;
+	edits: vscode.NotebookEdit[];
+	isDone?: boolean;
+	constructor(uri: vscode.Uri, editsOrDone: vscode.NotebookEdit | vscode.NotebookEdit[] | true) {
+		this.uri = uri;
+		if (editsOrDone === true) {
+			this.isDone = true;
+			this.edits = [];
+		} else {
+			this.edits = Array.isArray(editsOrDone) ? editsOrDone : [editsOrDone];
+
+		}
+	}
+}
+
 export class ChatRequestTurn implements vscode.ChatRequestTurn {
 	constructor(
 		readonly prompt: string,
@@ -4898,6 +4913,9 @@ export class LanguageModelToolResult {
 			content: this.content,
 		};
 	}
+}
+
+export class ExtendedLanguageModelToolResult extends LanguageModelToolResult {
 }
 
 export enum LanguageModelChatToolMode {
