@@ -6,6 +6,7 @@
 import { Codicon } from '../../../../../base/common/codicons.js';
 import { diffSets } from '../../../../../base/common/collections.js';
 import { Event } from '../../../../../base/common/event.js';
+import { Iterable } from '../../../../../base/common/iterator.js';
 import { KeyCode, KeyMod } from '../../../../../base/common/keyCodes.js';
 import { DisposableStore } from '../../../../../base/common/lifecycle.js';
 import { ServicesAccessor } from '../../../../../editor/browser/editorExtensions.js';
@@ -15,6 +16,7 @@ import { ContextKeyExpr } from '../../../../../platform/contextkey/common/contex
 import { ExtensionIdentifier } from '../../../../../platform/extensions/common/extensions.js';
 import { KeybindingWeight } from '../../../../../platform/keybinding/common/keybindingsRegistry.js';
 import { IQuickInputService, IQuickPickItem, IQuickPickSeparator } from '../../../../../platform/quickinput/common/quickInput.js';
+import { ITelemetryService } from '../../../../../platform/telemetry/common/telemetry.js';
 import { IExtensionService } from '../../../../services/extensions/common/extensions.js';
 import { IMcpService, IMcpServer, McpConnectionState } from '../../../mcp/common/mcpTypes.js';
 import { ChatContextKeys } from '../../common/chatContextKeys.js';
@@ -24,6 +26,18 @@ import { ChatMode } from '../../common/constants.js';
 import { ILanguageModelToolsService, IToolData } from '../../common/languageModelToolsService.js';
 import { IChatWidget, IChatWidgetService } from '../chat.js';
 import { CHAT_CATEGORY } from './chatActions.js';
+
+
+type SelectedToolData = {
+	enabled: number;
+	total: number;
+};
+type SelectedToolClassification = {
+	owner: 'connor4312';
+	comment: 'Details the capabilities of the MCP server';
+	enabled: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; comment: 'Number of enabled chat tools' };
+	total: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; comment: 'Number of total chat tools' };
+};
 
 export const AcceptToolConfirmationActionId = 'workbench.action.chat.acceptTool';
 
@@ -100,6 +114,7 @@ export class AttachToolsAction extends Action2 {
 		const toolsService = accessor.get(ILanguageModelToolsService);
 		const extensionService = accessor.get(IExtensionService);
 		const chatWidgetService = accessor.get(IChatWidgetService);
+		const telemetryService = accessor.get(ITelemetryService);
 
 		let widget = chatWidgetService.lastFocusedWidget;
 		if (!widget) {
@@ -153,9 +168,8 @@ export class AttachToolsAction extends Action2 {
 			if (mcpServer) {
 				bucket = toolBuckets.get(mcpServer.definition.id) ?? {
 					type: 'item',
-					label: mcpServer.definition.label,
-					// description: mcpServer.definition.,
-					status: localize('desc', "MCP - {0} ({1})", mcpServer.collection.label, McpConnectionState.toString(mcpServer.connectionState.get())),
+					label: localize('mcplabel', "MCP Server: {0}", mcpServer.definition.label),
+					status: localize('mcpstatus', "From {0} ({1})", mcpServer.collection.label, McpConnectionState.toString(mcpServer.connectionState.get())),
 					ordinal: BucketOrdinal.Mcp,
 					picked: false,
 					children: []
@@ -180,10 +194,10 @@ export class AttachToolsAction extends Action2 {
 				tool,
 				parent: bucket,
 				type: 'item',
-				label: `$(tools) ${tool.displayName}`,
+				label: tool.displayName,
 				description: tool.userDescription,
 				picked,
-				iconClasses: ['tool-pick']
+				indented: true,
 			});
 
 			if (picked) {
@@ -216,6 +230,8 @@ export class AttachToolsAction extends Action2 {
 
 		picker.placeholder = localize('placeholder', "Select tools that are available to chat");
 		picker.canSelectMany = true;
+		picker.keepScrollPosition = true;
+		picker.matchOnDescription = true;
 
 		let lastSelectedItems = new Set<MyPick>();
 		let ignoreEvent = false;
@@ -225,17 +241,22 @@ export class AttachToolsAction extends Action2 {
 			try {
 				const items = picks.filter((p): p is MyPick => p.type === 'item' && Boolean(p.picked));
 				lastSelectedItems = new Set(items);
-				picker.items = picks;
 				picker.selectedItems = items;
 
-				widget.input.selectedToolsModel.update(items.filter(isToolPick).map(tool => tool.tool));
-
+				const toolPicks = items.filter(isToolPick);
+				const allTools = picks.filter(isToolPick);
+				if (toolPicks.length === allTools.length) {
+					widget.input.selectedToolsModel.reset();
+				} else {
+					widget.input.selectedToolsModel.update(items.filter(isToolPick).map(tool => tool.tool));
+				}
 			} finally {
 				ignoreEvent = false;
 			}
 		};
 
 		_update();
+		picker.items = picks;
 		picker.show();
 
 		store.add(picker.onDidChangeSelection(selectedPicks => {
@@ -277,6 +298,10 @@ export class AttachToolsAction extends Action2 {
 		}));
 
 		await Promise.race([Event.toPromise(Event.any(picker.onDidAccept, picker.onDidHide))]);
+		telemetryService.publicLog2<SelectedToolData, SelectedToolClassification>('chat/selectedTools', {
+			enabled: widget.input.selectedToolsModel.tools.get().length,
+			total: Iterable.length(toolsService.getTools()),
+		});
 		store.dispose();
 	}
 }

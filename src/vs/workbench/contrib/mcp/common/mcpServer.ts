@@ -8,8 +8,11 @@ import { CancellationToken, CancellationTokenSource } from '../../../../base/com
 import { Disposable, DisposableStore, IDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { LRUCache } from '../../../../base/common/map.js';
 import { autorun, autorunWithStore, derived, disposableObservableValue, IObservable, ITransaction, observableFromEvent, ObservablePromise, observableValue, transaction } from '../../../../base/common/observable.js';
+import { basename } from '../../../../base/common/resources.js';
+import { URI } from '../../../../base/common/uri.js';
 import { ILogger, ILoggerService } from '../../../../platform/log/common/log.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
+import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { IExtensionService } from '../../../services/extensions/common/extensions.js';
 import { IOutputService } from '../../../services/output/common/output.js';
@@ -19,6 +22,31 @@ import { McpServerRequestHandler } from './mcpServerRequestHandler.js';
 import { extensionMcpCollectionPrefix, IMcpServer, IMcpServerConnection, IMcpTool, McpCollectionReference, McpConnectionFailedError, McpConnectionState, McpDefinitionReference, McpServerDefinition, McpServerToolsState } from './mcpTypes.js';
 import { MCP } from './modelContextProtocol.js';
 
+type ServerBootData = {
+	supportsLogging: boolean;
+	supportsPrompts: boolean;
+	supportsResources: boolean;
+	toolCount: number;
+};
+type ServerBootClassification = {
+	owner: 'connor4312';
+	comment: 'Details the capabilities of the MCP server';
+	supportsLogging: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; comment: 'Whether the server supports logging' };
+	supportsPrompts: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; comment: 'Whether the server supports prompts' };
+	supportsResources: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; comment: 'Whether the server supports resource' };
+	toolCount: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; comment: 'The number of tools the server advertises' };
+};
+
+type ServerBootState = {
+	state: string;
+	time: number;
+};
+type ServerBootStateClassification = {
+	owner: 'connor4312';
+	comment: 'Details the capabilities of the MCP server';
+	state: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; comment: 'The server outcome' };
+	time: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; comment: 'Duration in milliseconds to reach that state' };
+};
 
 interface IToolCacheEntry {
 	/** Cached tools so we can show what's available before it's started */
@@ -140,6 +168,7 @@ export class McpServer extends Disposable implements IMcpServer {
 	constructor(
 		public readonly collection: McpCollectionReference,
 		public readonly definition: McpDefinitionReference,
+		explicitRoots: URI[] | undefined,
 		private readonly _requiresExtensionActivation: boolean | undefined,
 		private readonly _toolCache: McpServerMetadataCache,
 		@IMcpRegistry private readonly _mcpRegistry: IMcpRegistry,
@@ -147,21 +176,24 @@ export class McpServer extends Disposable implements IMcpServer {
 		@IExtensionService private readonly _extensionService: IExtensionService,
 		@ILoggerService private readonly _loggerService: ILoggerService,
 		@IOutputService private readonly _outputService: IOutputService,
+		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 	) {
 		super();
 
-		this._loggerId = `mcpServer/${definition.id}`;
+		this._loggerId = `mcpServer.${definition.id}`;
 		this._logger = this._register(_loggerService.createLogger(this._loggerId, { hidden: true, name: `MCP: ${definition.label}` }));
 		// If the logger is disposed but not deregistered, then the disposed instance
 		// is reused and no-ops. todo@sandy081 this seems like a bug.
 		this._register(toDisposable(() => _loggerService.deregisterLogger(this._loggerId)));
 
 		// 1. Reflect workspaces into the MCP roots
-		const workspaces = observableFromEvent(
-			this,
-			workspacesService.onDidChangeWorkspaceFolders,
-			() => workspacesService.getWorkspace().folders,
-		);
+		const workspaces = explicitRoots
+			? observableValue(this, explicitRoots.map(uri => ({ uri, name: basename(uri) })))
+			: observableFromEvent(
+				this,
+				workspacesService.onDidChangeWorkspaceFolders,
+				() => workspacesService.getWorkspace().folders,
+			);
 
 		this._register(autorunWithStore(reader => {
 			const cnx = this._connection.read(reader)?.handler.read(reader);
@@ -248,7 +280,14 @@ export class McpServer extends Disposable implements IMcpServer {
 				this._connection.set(connection, undefined);
 			}
 
-			return connection.start();
+			const start = Date.now();
+			const state = await connection.start();
+			this._telemetryService.publicLog2<ServerBootState, ServerBootStateClassification>('mcp/serverBootState', {
+				state: McpConnectionState.toKindString(state.state),
+				time: Date.now() - start,
+			});
+
+			return state;
 		});
 	}
 
@@ -283,6 +322,8 @@ export class McpServer extends Disposable implements IMcpServer {
 				});
 			});
 			this.toolsFromServerPromise.set(new ObservablePromise(toolPromiseSafe), tx);
+
+			return [toolPromise];
 		};
 
 		store.add(handler.onDidChangeToolList(() => {
@@ -290,8 +331,18 @@ export class McpServer extends Disposable implements IMcpServer {
 			updateTools(undefined);
 		}));
 
+		let promises: ReturnType<typeof updateTools>;
 		transaction(tx => {
-			updateTools(tx);
+			promises = updateTools(tx);
+		});
+
+		Promise.all(promises!).then(([tools]) => {
+			this._telemetryService.publicLog2<ServerBootData, ServerBootClassification>('mcp/serverBoot', {
+				supportsLogging: !!handler.capabilities.logging,
+				supportsPrompts: !!handler.capabilities.prompts,
+				supportsResources: !!handler.capabilities.resources,
+				toolCount: tools.length,
+			});
 		});
 	}
 
