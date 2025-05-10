@@ -14,6 +14,7 @@ import { toErrorMessage } from '../../../../base/common/errorMessage.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { FuzzyScore } from '../../../../base/common/filters.js';
 import { MarkdownString } from '../../../../base/common/htmlContent.js';
+import { Iterable } from '../../../../base/common/iterator.js';
 import { combinedDisposable, Disposable, DisposableStore, IDisposable, MutableDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { ResourceSet } from '../../../../base/common/map.js';
 import { Schemas } from '../../../../base/common/network.js';
@@ -26,7 +27,6 @@ import { ICodeEditorService } from '../../../../editor/browser/services/codeEdit
 import { isLocation, Location } from '../../../../editor/common/languages.js';
 import { localize } from '../../../../nls.js';
 import { MenuId } from '../../../../platform/actions/common/actions.js';
-import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { IContextKey, IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { IContextMenuService } from '../../../../platform/contextview/browser/contextView.js';
@@ -47,7 +47,7 @@ import { applyingChatEditsFailedContextKey, decidedChatEditingResourceContextKey
 import { ChatPauseState, IChatModel, IChatRequestVariableEntry, IChatResponseModel } from '../common/chatModel.js';
 import { chatAgentLeader, ChatRequestAgentPart, ChatRequestDynamicVariablePart, ChatRequestSlashPromptPart, ChatRequestToolPart, chatSubcommandLeader, formatChatQuestion, IParsedChatRequest } from '../common/chatParserTypes.js';
 import { ChatRequestParser } from '../common/chatRequestParser.js';
-import { IChatFollowup, IChatLocationData, IChatSendRequestOptions, IChatService } from '../common/chatService.js';
+import { IChatLocationData, IChatSendRequestOptions, IChatService } from '../common/chatService.js';
 import { IChatSlashCommandService } from '../common/chatSlashCommands.js';
 import { ChatViewModel, IChatResponseViewModel, isRequestVM, isResponseVM } from '../common/chatViewModel.js';
 import { IChatInputState } from '../common/chatWidgetHistoryService.js';
@@ -55,7 +55,7 @@ import { CodeBlockModelCollection } from '../common/codeBlockModelCollection.js'
 import { ChatAgentLocation, ChatMode } from '../common/constants.js';
 import { ILanguageModelToolsService } from '../common/languageModelToolsService.js';
 import { IPromptsService } from '../common/promptSyntax/service/types.js';
-import { IToggleChatModeArgs, ToggleAgentModeActionId } from './actions/chatExecuteActions.js';
+import { handleModeSwitch } from './actions/chatActions.js';
 import { ChatTreeItem, IChatAcceptInputOptions, IChatAccessibilityService, IChatCodeBlockInfo, IChatFileTreeInfo, IChatListItemRendererOptions, IChatWidget, IChatWidgetService, IChatWidgetViewContext, IChatWidgetViewOptions } from './chat.js';
 import { ChatAccessibilityProvider } from './chatAccessibilityProvider.js';
 import { ChatAttachmentModel } from './chatAttachmentModel.js';
@@ -271,7 +271,6 @@ export class ChatWidget extends Disposable implements IChatWidget {
 		@IChatEditingService chatEditingService: IChatEditingService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 		@IPromptsService private readonly promptsService: IPromptsService,
-		@ICommandService private readonly commandService: ICommandService,
 		@ILanguageModelToolsService private readonly toolsService: ILanguageModelToolsService,
 	) {
 		super();
@@ -675,13 +674,7 @@ export class ChatWidget extends Disposable implements IChatWidget {
 				this.layoutDynamicChatTreeItemMode();
 			}
 
-			if (this.lastItem && isResponseVM(this.lastItem) && this.lastItem.isComplete) {
-				this.renderFollowups(this.lastItem.replyFollowups, this.lastItem);
-			} else if (!treeItems.length && this.viewModel) {
-				this.renderSampleQuestions();
-			} else {
-				this.renderFollowups(undefined);
-			}
+			this.renderFollowups();
 		}
 	}
 
@@ -750,15 +743,12 @@ export class ChatWidget extends Disposable implements IChatWidget {
 		}
 	}
 
-	private renderSampleQuestions() {
-		if (this.viewModel?.getItems().length === 0) {
-			// TODO@roblourens hack- only Chat mode supports sample questions
-			this.renderFollowups(this.input.currentMode === ChatMode.Ask ? this.viewModel.model.sampleQuestions : undefined);
+	private async renderFollowups(): Promise<void> {
+		if (this.lastItem && isResponseVM(this.lastItem) && this.lastItem.isComplete && this.inputPart.currentMode === ChatMode.Ask) {
+			this.inputPart.renderFollowups(this.lastItem.replyFollowups, this.lastItem);
+		} else {
+			this.inputPart.renderFollowups(undefined, undefined);
 		}
-	}
-
-	private async renderFollowups(items: IChatFollowup[] | undefined, response?: IChatResponseViewModel): Promise<void> {
-		this.inputPart.renderFollowups(items, response);
 
 		if (this.bodyDimension) {
 			this.layout(this.bodyDimension.height, this.bodyDimension.width);
@@ -1030,12 +1020,17 @@ export class ChatWidget extends Disposable implements IChatWidget {
 			this.renderWelcomeViewContentIfNeeded();
 		}));
 		this._register(this.input.onDidChangeCurrentChatMode(() => {
-			this.renderSampleQuestions();
 			this.renderWelcomeViewContentIfNeeded();
 			this.refreshParsedInput();
+			this.renderFollowups();
 		}));
 		this._register(autorun(r => {
-			this.input.selectedToolsModel.tools.read(r); // SIGNAL
+			const enabledTools = new Set(this.input.selectedToolsModel.tools.read(r).map(t => t.id));
+			const disabledTools = this.inputPart.attachmentModel.attachments
+				.filter(a => a.kind === 'tool' && !enabledTools.has(a.id))
+				.map(a => a.id);
+
+			this.inputPart.attachmentModel.updateContent(disabledTools, Iterable.empty());
 			this.refreshParsedInput();
 		}));
 	}
@@ -1232,7 +1227,11 @@ export class ChatWidget extends Disposable implements IChatWidget {
 			if (instructionsEnabled) {
 				input = await this._handlePromptSlashCommand(input, attachedContext);
 				await this.autoAttachInstructions(attachedContext);
-				input = await this.setupChatModeAndTools(input, attachedContext);
+				const newInput = await this.setupChatModeAndTools(input, attachedContext);
+				if (newInput === undefined) {
+					return;
+				}
+				input = newInput;
 			}
 
 			if (this.viewOptions.enableWorkingSet !== undefined && this.input.currentMode === ChatMode.Edit && !this.chatService.edits2Enabled) {
@@ -1274,7 +1273,7 @@ export class ChatWidget extends Disposable implements IChatWidget {
 			let userSelectedTools: string[] | undefined;
 			let userSelectedTools2: Record<string, boolean> | undefined;
 			if (this.input.currentMode === ChatMode.Agent) {
-				userSelectedTools = this.inputPart.selectedToolsModel.tools.get().map(tool => tool.id);
+				userSelectedTools = Array.from(this.inputPart.selectedToolsModel.asEnablementMap().entries()).map(([tool]) => tool.id);
 
 				userSelectedTools2 = {};
 				for (const [tool, enablement] of this.inputPart.selectedToolsModel.asEnablementMap()) {
@@ -1512,7 +1511,7 @@ export class ChatWidget extends Disposable implements IChatWidget {
 	private async setupChatModeAndTools(
 		input: string,
 		attachedContext: readonly IChatRequestVariableEntry[],
-	): Promise<string> {
+	): Promise<string | undefined> {
 		// process prompt files starting from the 'root' ones
 		const promptFileVariables = attachedContext
 			.filter(isPromptFileChatVariable)
@@ -1543,10 +1542,14 @@ export class ChatWidget extends Disposable implements IChatWidget {
 
 		// switch to appropriate chat mode if needed
 		if (mode && mode !== this.inputPart.currentMode) {
-			await this.commandService.executeCommand(
-				ToggleAgentModeActionId,
-				{ mode } satisfies IToggleChatModeArgs,
-			);
+			const chatModeCheck = await this.instantiationService.invokeFunction(handleModeSwitch, this.inputPart.currentMode, mode, this.viewModel?.model.getRequests().length ?? 0, this.viewModel?.model.editingSession);
+			if (!chatModeCheck) {
+				return undefined;
+			} else if (chatModeCheck.needToClearSession) {
+				this.clear();
+				await this.waitForReady();
+			}
+			this.inputPart.setChatMode(mode);
 		}
 
 		// if not tools to enable are present, we are done
