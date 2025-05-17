@@ -18,6 +18,7 @@ import { Extensions as ConfigurationExtensions, ConfigurationScope, IConfigurati
 import { SyncDescriptor } from '../../../../platform/instantiation/common/descriptors.js';
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
+import { mcpGalleryServiceUrlConfig } from '../../../../platform/mcp/common/mcpManagement.js';
 import { PromptsConfig } from '../../../../platform/prompts/common/config.js';
 import { INSTRUCTIONS_DEFAULT_SOURCE_FOLDER, INSTRUCTION_FILE_EXTENSION, PROMPT_DEFAULT_SOURCE_FOLDER, PROMPT_FILE_EXTENSION } from '../../../../platform/prompts/common/constants.js';
 import { Registry } from '../../../../platform/registry/common/platform.js';
@@ -47,16 +48,17 @@ import { ILanguageModelsService, LanguageModelsService } from '../common/languag
 import { ILanguageModelStatsService, LanguageModelStatsService } from '../common/languageModelStats.js';
 import { ILanguageModelToolsService } from '../common/languageModelToolsService.js';
 import { INSTRUCTIONS_DOCUMENTATION_URL, PROMPT_DOCUMENTATION_URL } from '../common/promptSyntax/constants.js';
-import { registerReusablePromptLanguageFeatures } from '../common/promptSyntax/languageFeatures/providers/index.js';
+import { registerPromptFileContributions } from '../common/promptSyntax/contributions/index.js';
 import { PromptsService } from '../common/promptSyntax/service/promptsService.js';
 import { IPromptsService } from '../common/promptSyntax/service/types.js';
 import { LanguageModelToolsExtensionPointHandler } from '../common/tools/languageModelToolsContribution.js';
 import { BuiltinToolsContribution } from '../common/tools/tools.js';
 import { IVoiceChatService, VoiceChatService } from '../common/voiceChatService.js';
 import { AgentChatAccessibilityHelp, EditsChatAccessibilityHelp, PanelChatAccessibilityHelp, QuickChatAccessibilityHelp } from './actions/chatAccessibilityHelp.js';
-import { CopilotTitleBarMenuRendering, registerChatActions } from './actions/chatActions.js';
-import { ACTION_ID_NEW_CHAT, registerNewChatActions } from './actions/chatClearActions.js';
+import { CopilotTitleBarMenuRendering, registerChatActions, ACTION_ID_NEW_CHAT } from './actions/chatActions.js';
+import { registerNewChatActions } from './actions/chatClearActions.js';
 import { CodeBlockActionRendering, registerChatCodeBlockActions, registerChatCodeCompareBlockActions } from './actions/chatCodeblockActions.js';
+import { ChatContextContributions } from './actions/chatContext.js';
 import { registerChatContextActions } from './actions/chatContextActions.js';
 import { registerChatCopyActions } from './actions/chatCopyActions.js';
 import { registerChatDeveloperActions } from './actions/chatDeveloperActions.js';
@@ -74,6 +76,7 @@ import { IChatAccessibilityService, IChatCodeBlockContextProviderService, IChatW
 import { ChatAccessibilityService } from './chatAccessibilityService.js';
 import './chatAttachmentModel.js';
 import { ChatMarkdownAnchorService, IChatMarkdownAnchorService } from './chatContentParts/chatMarkdownAnchorService.js';
+import { ChatContextPickService, IChatContextPickService } from './chatContextPickService.js';
 import { ChatInputBoxContentProvider } from './chatEdinputInputContentProvider.js';
 import { ChatEditingEditorAccessibility } from './chatEditing/chatEditingEditorAccessibility.js';
 import { registerChatEditorActions } from './chatEditing/chatEditingEditorActions.js';
@@ -100,7 +103,6 @@ import './contrib/chatInputEditorContrib.js';
 import './contrib/chatInputEditorHover.js';
 import { ChatRelatedFilesContribution } from './contrib/chatInputRelatedFilesContrib.js';
 import { LanguageModelToolsService } from './languageModelToolsService.js';
-import './promptSyntax/contributions/attachInstructionsCommand.js';
 import './promptSyntax/contributions/createPromptCommand/createPromptCommand.js';
 import { ChatViewsWelcomeHandler } from './viewsWelcome/chatViewsWelcomeHandler.js';
 
@@ -216,13 +218,19 @@ configurationRegistry.registerConfiguration({
 			default: true,
 			description: nls.localize('chat.sendElementsToChat.enabled', "Controls whether elements can be sent to chat from the Simple Browser."),
 			type: 'boolean',
-			tags: ['preview']
+			tags: ['experimental']
+		},
+		'chat.sendElementsToChat.attachCSS': {
+			default: true,
+			markdownDescription: nls.localize('chat.sendElementsToChat.attachCSS', "Controls whether CSS of the selected element will be added to the chat. {0} must be enabled.", '`#chat.sendElementsToChat.enabled#`'),
+			type: 'boolean',
+			tags: ['experimental']
 		},
 		'chat.sendElementsToChat.attachImages': {
 			default: true,
-			description: nls.localize('chat.sendElementsToChat.attachImages', "Controls whether a screenshot of the attached element will be added to the chat."),
+			markdownDescription: nls.localize('chat.sendElementsToChat.attachImages', "Controls whether a screenshot of the selected element will be added to the chat. {0} must be enabled.", '`#chat.sendElementsToChat.enabled#`'),
 			type: 'boolean',
-			tags: ['preview']
+			tags: ['experimental']
 		},
 		[mcpEnabledSection]: {
 			type: 'boolean',
@@ -261,6 +269,7 @@ configurationRegistry.registerConfiguration({
 			type: 'boolean',
 			description: nls.localize('chat.extensionToolsEnabled', "Enable using tools contributed by third-party extensions."),
 			default: true,
+			tags: ['preview'],
 			policy: {
 				name: 'ChatAgentExtensionTools',
 				minimumVersion: '1.99',
@@ -271,7 +280,7 @@ configurationRegistry.registerConfiguration({
 		},
 		[ChatConfiguration.AgentEnabled]: {
 			type: 'boolean',
-			description: nls.localize('chat.agent.enabled.description', "Enable agent mode for {0}. When this is enabled, a dropdown appears in the view to toggle agent mode.", 'Copilot Chat'),
+			description: nls.localize('chat.agent.enabled.description', "Enable agent mode for {0}. When this is enabled, agent mode can be activated via the dropdown in the view.", 'Copilot Chat'),
 			default: true,
 			tags: ['onExp'],
 			policy: {
@@ -295,6 +304,18 @@ configurationRegistry.registerConfiguration({
 			],
 			default: true,
 			markdownDescription: nls.localize('mpc.discovery.enabled', "Configures discovery of Model Context Protocol servers on the machine. It may be set to `true` or `false` to disable or enable all sources, and an mapping sources you wish to enable."),
+		},
+		[mcpGalleryServiceUrlConfig]: {
+			type: 'string',
+			description: nls.localize('mcp.gallery.serviceUrl', "Configure the MCP Gallery service URL to connect to"),
+			default: '',
+			scope: ConfigurationScope.APPLICATION,
+			tags: ['usesOnlineServices'],
+			included: false,
+			policy: {
+				name: 'McpGalleryServiceUrl',
+				minimumVersion: '1.101',
+			},
 		},
 		[PromptsConfig.KEY]: {
 			type: 'boolean',
@@ -378,6 +399,12 @@ configurationRegistry.registerConfiguration({
 				},
 			],
 		},
+		'chat.setup.signInWithAlternateProvider': {
+			type: 'boolean',
+			description: nls.localize('chat.signInWithAlternateProvider', "Enable alternative sign-in provider."),
+			default: false,
+			tags: ['onExp', 'experimental'],
+		},
 	}
 });
 Registry.as<IEditorPaneRegistry>(EditorExtensions.EditorPane).registerEditorPane(
@@ -458,7 +485,7 @@ class ChatAgentSettingContribution extends Disposable implements IWorkbenchContr
 					properties: {
 						'chat.agent.maxRequests': {
 							type: 'number',
-							markdownDescription: nls.localize('chat.agent.maxRequests', "The maximum number of requests to allow Copilot Edits to use per-turn in agent mode. When the limit is reached, Copilot will ask the user to confirm that it should keep working. \n\n> **Note**: For users on the Copilot Free plan, note that each agent mode request currently uses one chat request."),
+							markdownDescription: nls.localize('chat.agent.maxRequests', "The maximum number of requests to allow Copilot Edits to use per-turn in agent mode. When the limit is reached, Copilot will ask the user to confirm that it should keep working."),
 							default: defaultValue,
 						},
 					}
@@ -611,6 +638,7 @@ registerWorkbenchContribution2(ChatEditingEditorOverlay.ID, ChatEditingEditorOve
 registerWorkbenchContribution2(SimpleBrowserOverlay.ID, SimpleBrowserOverlay, WorkbenchPhase.AfterRestored);
 registerWorkbenchContribution2(ChatEditingEditorContextKeys.ID, ChatEditingEditorContextKeys, WorkbenchPhase.AfterRestored);
 registerWorkbenchContribution2(ChatTransferContribution.ID, ChatTransferContribution, WorkbenchPhase.BlockRestore);
+registerWorkbenchContribution2(ChatContextContributions.ID, ChatContextContributions, WorkbenchPhase.AfterRestored);
 
 registerChatActions();
 registerChatCopyActions();
@@ -652,7 +680,8 @@ registerSingleton(IChatMarkdownAnchorService, ChatMarkdownAnchorService, Instant
 registerSingleton(ILanguageModelIgnoredFilesService, LanguageModelIgnoredFilesService, InstantiationType.Delayed);
 registerSingleton(IChatEntitlementService, ChatEntitlementService, InstantiationType.Delayed);
 registerSingleton(IPromptsService, PromptsService, InstantiationType.Delayed);
+registerSingleton(IChatContextPickService, ChatContextPickService, InstantiationType.Delayed);
 
 registerWorkbenchContribution2(ChatEditingNotebookFileSystemProviderContrib.ID, ChatEditingNotebookFileSystemProviderContrib, WorkbenchPhase.BlockStartup);
 
-registerReusablePromptLanguageFeatures();
+registerPromptFileContributions();

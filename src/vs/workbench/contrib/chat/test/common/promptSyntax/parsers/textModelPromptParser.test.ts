@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
-import { createURI } from '../testUtils/createUri.js';
 import { ChatMode } from '../../../../common/constants.js';
 import { URI } from '../../../../../../../base/common/uri.js';
 import { Schemas } from '../../../../../../../base/common/network.js';
@@ -19,8 +18,8 @@ import { randomBoolean } from '../../../../../../../base/test/common/testUtils.j
 import { FileService } from '../../../../../../../platform/files/common/fileService.js';
 import { createTextModel } from '../../../../../../../editor/test/common/testTextModel.js';
 import { ILogService, NullLogService } from '../../../../../../../platform/log/common/log.js';
-import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../../../base/test/common/utils.js';
 import { TextModelPromptParser } from '../../../../common/promptSyntax/parsers/textModelPromptParser.js';
+import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../../../base/test/common/utils.js';
 import { IInstantiationService } from '../../../../../../../platform/instantiation/common/instantiation.js';
 import { INSTRUCTIONS_LANGUAGE_ID, PROMPT_LANGUAGE_ID } from '../../../../common/promptSyntax/constants.js';
 import { InMemoryFileSystemProvider } from '../../../../../../../platform/files/common/inMemoryFilesystemProvider.js';
@@ -47,7 +46,7 @@ class TextModelPromptParserTest extends Disposable {
 		initialContents: string[],
 		languageId: string = PROMPT_LANGUAGE_ID,
 		@IFileService fileService: IFileService,
-		@IInstantiationService initService: IInstantiationService,
+		@IInstantiationService instantiationService: IInstantiationService,
 	) {
 		super();
 
@@ -70,7 +69,7 @@ class TextModelPromptParserTest extends Disposable {
 
 		// create the parser instance
 		this.parser = this._register(
-			initService.createInstance(TextModelPromptParser, this.model, {}),
+			instantiationService.createInstance(TextModelPromptParser, this.model, {}),
 		).start();
 	}
 
@@ -179,7 +178,7 @@ suite('TextModelPromptParser', () => {
 
 	test('• core logic #1', async () => {
 		const test = createTest(
-			createURI('/foo/bar.md'),
+			URI.file('/foo/bar.md'),
 			[
 				/* 01 */"The quick brown fox tries #file:/abs/path/to/file.md online yoga for the first time.",
 				/* 02 */"Maria discovered a stray turtle roaming in her kitchen.",
@@ -198,38 +197,38 @@ suite('TextModelPromptParser', () => {
 
 		await test.validateReferences([
 			new ExpectedReference({
-				uri: createURI('/abs/path/to/file.md'),
+				uri: URI.file('/abs/path/to/file.md'),
 				text: '#file:/abs/path/to/file.md',
 				path: '/abs/path/to/file.md',
 				startLine: 1,
 				startColumn: 27,
 				pathStartColumn: 33,
-				childrenOrError: new OpenFailed(createURI('/abs/path/to/file.md'), 'File not found.'),
+				childrenOrError: new OpenFailed(URI.file('/abs/path/to/file.md'), 'File not found.'),
 			}),
 			new ExpectedReference({
-				uri: createURI('/foo/folder/binary.file'),
+				uri: URI.file('/foo/folder/binary.file'),
 				text: '#file:./folder/binary.file',
 				path: './folder/binary.file',
 				startLine: 7,
 				startColumn: 10,
 				pathStartColumn: 16,
-				childrenOrError: new OpenFailed(createURI('/foo/folder/binary.file'), 'File not found.'),
+				childrenOrError: new OpenFailed(URI.file('/foo/folder/binary.file'), 'File not found.'),
 			}),
 			new ExpectedReference({
-				uri: createURI('/etc/hosts/random-file.txt'),
+				uri: URI.file('/etc/hosts/random-file.txt'),
 				text: '[md link](/etc/hosts/random-file.txt)',
 				path: '/etc/hosts/random-file.txt',
 				startLine: 7,
 				startColumn: 81,
 				pathStartColumn: 91,
-				childrenOrError: new OpenFailed(createURI('/etc/hosts/random-file.txt'), 'File not found.'),
+				childrenOrError: new OpenFailed(URI.file('/etc/hosts/random-file.txt'), 'File not found.'),
 			}),
 		]);
 	});
 
 	test('• core logic #2', async () => {
 		const test = createTest(
-			createURI('/absolute/folder/and/a/filename.txt'),
+			URI.file('/absolute/folder/and/a/filename.txt'),
 			[
 				/* 01 */"The penguin wore sunglasses but never left the iceberg.",
 				/* 02 */"I once saw a cloud that looked like an antique teapot.",
@@ -251,49 +250,94 @@ suite('TextModelPromptParser', () => {
 
 		await test.validateReferences([
 			new ExpectedReference({
-				uri: createURI('/absolute/folder/and/a/foo-bar-baz/another-file.ts'),
+				uri: URI.file('/absolute/folder/and/a/foo-bar-baz/another-file.ts'),
 				text: '[link text](./foo-bar-baz/another-file.ts)',
 				path: './foo-bar-baz/another-file.ts',
 				startLine: 3,
 				startColumn: 43,
 				pathStartColumn: 55,
-				childrenOrError: new OpenFailed(createURI('/absolute/folder/and/a/foo-bar-baz/another-file.ts'), 'File not found.'),
+				childrenOrError: new OpenFailed(URI.file('/absolute/folder/and/a/foo-bar-baz/another-file.ts'), 'File not found.'),
 			}),
 			new ExpectedReference({
-				uri: createURI('/absolute/c/file_name.prompt.md'),
+				uri: URI.file('/absolute/c/file_name.prompt.md'),
 				text: '[caption](../../../c/file_name.prompt.md)',
 				path: '../../../c/file_name.prompt.md',
 				startLine: 6,
 				startColumn: 7,
 				pathStartColumn: 17,
-				childrenOrError: new OpenFailed(createURI('/absolute/c/file_name.prompt.md'), 'File not found.'),
+				childrenOrError: new OpenFailed(URI.file('/absolute/c/file_name.prompt.md'), 'File not found.'),
 			}),
 			new ExpectedReference({
-				uri: createURI('/absolute/folder/main.rs'),
+				uri: URI.file('/absolute/folder/main.rs'),
 				text: '#file:../../main.rs',
 				path: '../../main.rs',
 				startLine: 11,
 				startColumn: 36,
 				pathStartColumn: 42,
-				childrenOrError: new OpenFailed(createURI('/absolute/folder/main.rs'), 'File not found.'),
+				childrenOrError: new OpenFailed(URI.file('/absolute/folder/main.rs'), 'File not found.'),
 			}),
 			new ExpectedReference({
-				uri: createURI('/absolute/folder/and/a/samefile.jpeg'),
+				uri: URI.file('/absolute/folder/and/a/samefile.jpeg'),
 				text: '#file:./somefolder/../samefile.jpeg',
 				path: './somefolder/../samefile.jpeg',
 				startLine: 11,
 				startColumn: 56,
 				pathStartColumn: 62,
-				childrenOrError: new OpenFailed(createURI('/absolute/folder/and/a/samefile.jpeg'), 'File not found.'),
+				childrenOrError: new OpenFailed(URI.file('/absolute/folder/and/a/samefile.jpeg'), 'File not found.'),
 			}),
 		]);
 	});
 
 	suite('• header', () => {
 		suite(' • metadata', () => {
-			test('• has correct \'prompt\' metadata', async () => {
+			test(`• empty header`, async () => {
 				const test = createTest(
-					createURI('/absolute/folder/and/a/filename.txt'),
+					URI.file('/absolute/folder/and/a/filename.txt'),
+					[
+					/* 01 */"---",
+					/* 02 */"",
+					/* 03 */"---",
+					/* 04 */"The cactus on my desk has a thriving Instagram account.",
+					/* 05 */"Midnight snacks are the secret to eternal [text](./foo-bar-baz/another-file.ts) happiness.",
+					/* 06 */"In an alternate universe, pigeons deliver sushi by drone.",
+					/* 07 */"Lunar rainbows only appear when you sing in falsetto.",
+					/* 08 */"Carrots have secret telepathic abilities, but only on Tuesdays.",
+					],
+				);
+
+				await test.validateReferences([
+					new ExpectedReference({
+						uri: URI.file('/absolute/folder/and/a/foo-bar-baz/another-file.ts'),
+						text: '[text](./foo-bar-baz/another-file.ts)',
+						path: './foo-bar-baz/another-file.ts',
+						startLine: 5,
+						startColumn: 43,
+						pathStartColumn: 50,
+						childrenOrError: new OpenFailed(URI.file('/absolute/folder/and/a/foo-bar-baz/another-file.ts'), 'File not found.'),
+					}),
+				]);
+
+				const { header, metadata } = test.parser;
+				assertDefined(
+					header,
+					'Prompt header must be defined.',
+				);
+
+				assert.deepStrictEqual(
+					metadata,
+					{
+						applyTo: undefined,
+						description: undefined,
+						mode: undefined,
+						tools: undefined,
+					},
+					'Must have empty metadata.',
+				);
+			});
+
+			test(`• has correct 'prompt' metadata`, async () => {
+				const test = createTest(
+					URI.file('/absolute/folder/and/a/filename.txt'),
 					[
 					/* 01 */"---",
 					/* 02 */"description: 'My prompt.'\t\t",
@@ -314,13 +358,13 @@ suite('TextModelPromptParser', () => {
 
 				await test.validateReferences([
 					new ExpectedReference({
-						uri: createURI('/absolute/folder/and/a/foo-bar-baz/another-file.ts'),
+						uri: URI.file('/absolute/folder/and/a/foo-bar-baz/another-file.ts'),
 						text: '[text](./foo-bar-baz/another-file.ts)',
 						path: './foo-bar-baz/another-file.ts',
 						startLine: 11,
 						startColumn: 43,
 						pathStartColumn: 50,
-						childrenOrError: new OpenFailed(createURI('/absolute/folder/and/a/foo-bar-baz/another-file.ts'), 'File not found.'),
+						childrenOrError: new OpenFailed(URI.file('/absolute/folder/and/a/foo-bar-baz/another-file.ts'), 'File not found.'),
 					}),
 				]);
 
@@ -334,7 +378,7 @@ suite('TextModelPromptParser', () => {
 				assert.deepStrictEqual(
 					tools,
 					['tool_name1', 'tool_name2'],
-					`Prompt header must have correct tools metadata.`,
+					`Prompt header must have correct tools metadata, got '${tools?.join(', ')}'.`,
 				);
 
 				assert.strictEqual(
@@ -356,9 +400,9 @@ suite('TextModelPromptParser', () => {
 				);
 			});
 
-			test('• has correct \'instructions\' metadata', async () => {
+			test(`• has correct 'instructions' metadata`, async () => {
 				const test = createTest(
-					createURI('/absolute/folder/and/a/filename.instructions.md'),
+					URI.file('/absolute/folder/and/a/filename.instructions.md'),
 					[
 					/* 01 */"---",
 					/* 02 */"description: 'My prompt.'\t\t",
@@ -380,13 +424,13 @@ suite('TextModelPromptParser', () => {
 
 				await test.validateReferences([
 					new ExpectedReference({
-						uri: createURI('/absolute/folder/and/a/foo-bar-baz/another-file.ts'),
+						uri: URI.file('/absolute/folder/and/a/foo-bar-baz/another-file.ts'),
 						text: '[text](./foo-bar-baz/another-file.ts)',
 						path: './foo-bar-baz/another-file.ts',
 						startLine: 11,
 						startColumn: 43,
 						pathStartColumn: 50,
-						childrenOrError: new OpenFailed(createURI('/absolute/folder/and/a/foo-bar-baz/another-file.ts'), 'File not found.'),
+						childrenOrError: new OpenFailed(URI.file('/absolute/folder/and/a/foo-bar-baz/another-file.ts'), 'File not found.'),
 					}),
 				]);
 
@@ -426,7 +470,7 @@ suite('TextModelPromptParser', () => {
 		suite('• diagnostics', () => {
 			test('• core logic', async () => {
 				const test = createTest(
-					createURI('/absolute/folder/and/a/filename.txt'),
+					URI.file('/absolute/folder/and/a/filename.txt'),
 					[
 					/* 01 */"---",
 					/* 02 */"	description: true \t ",
@@ -446,13 +490,13 @@ suite('TextModelPromptParser', () => {
 
 				await test.validateReferences([
 					new ExpectedReference({
-						uri: createURI('/absolute/folder/and/a/foo-bar-baz/another-file.ts'),
+						uri: URI.file('/absolute/folder/and/a/foo-bar-baz/another-file.ts'),
 						text: '[text](./foo-bar-baz/another-file.ts)',
 						path: './foo-bar-baz/another-file.ts',
 						startLine: 10,
 						startColumn: 43,
 						pathStartColumn: 50,
-						childrenOrError: new OpenFailed(createURI('/absolute/folder/and/a/foo-bar-baz/another-file.ts'), 'File not found.'),
+						childrenOrError: new OpenFailed(URI.file('/absolute/folder/and/a/foo-bar-baz/another-file.ts'), 'File not found.'),
 					}),
 				]);
 
@@ -516,7 +560,7 @@ suite('TextModelPromptParser', () => {
 				suite('• language', () => {
 					test('• prompt', async () => {
 						const test = createTest(
-							createURI('/absolute/folder/and/a/my.prompt.md'),
+							URI.file('/absolute/folder/and/a/my.prompt.md'),
 							[
 					/* 01 */"---",
 					/* 02 */"applyTo: '**/*'",
@@ -557,7 +601,7 @@ suite('TextModelPromptParser', () => {
 
 					test('• instructions', async () => {
 						const test = createTest(
-							createURI('/absolute/folder/and/a/my.prompt.md'),
+							URI.file('/absolute/folder/and/a/my.prompt.md'),
 							[
 					/* 01 */"---",
 					/* 02 */"applyTo: '**/*'",
@@ -596,7 +640,7 @@ suite('TextModelPromptParser', () => {
 
 			test('• invalid glob pattern', async () => {
 				const test = createTest(
-					createURI('/absolute/folder/and/a/my.prompt.md'),
+					URI.file('/absolute/folder/and/a/my.prompt.md'),
 					[
 					/* 01 */"---",
 					/* 02 */"mode: \"agent\"",
@@ -640,7 +684,7 @@ suite('TextModelPromptParser', () => {
 				suite('• tools is set', () => {
 					test('• ask mode', async () => {
 						const test = createTest(
-							createURI('/absolute/folder/and/a/filename.txt'),
+							URI.file('/absolute/folder/and/a/filename.txt'),
 							[
 					/* 01 */"---",
 					/* 02 */"tools: [ 'tool_name3', \"tool_name4\" ]  \t\t  ", /* duplicate `tools` record is ignored */
@@ -680,7 +724,7 @@ suite('TextModelPromptParser', () => {
 
 					test('• edit mode', async () => {
 						const test = createTest(
-							createURI('/absolute/folder/and/a/filename.txt'),
+							URI.file('/absolute/folder/and/a/filename.txt'),
 							[
 					/* 01 */"---",
 					/* 02 */"tools: [ 'tool_name3', \"tool_name4\" ]  \t\t  ", /* duplicate `tools` record is ignored */
@@ -720,7 +764,7 @@ suite('TextModelPromptParser', () => {
 
 					test('• agent mode', async () => {
 						const test = createTest(
-							createURI('/absolute/folder/and/a/filename.txt'),
+							URI.file('/absolute/folder/and/a/filename.txt'),
 							[
 					/* 01 */"---",
 					/* 02 */"tools: [ 'tool_name3', \"tool_name4\" ]  \t\t  ", /* duplicate `tools` record is ignored */
@@ -755,7 +799,7 @@ suite('TextModelPromptParser', () => {
 
 					test('• no mode', async () => {
 						const test = createTest(
-							createURI('/absolute/folder/and/a/filename.txt'),
+							URI.file('/absolute/folder/and/a/filename.txt'),
 							[
 					/* 01 */"---",
 					/* 02 */"tools: [ 'tool_name3', \"tool_name4\" ]  \t\t  ", /* duplicate `tools` record is ignored */
@@ -791,7 +835,7 @@ suite('TextModelPromptParser', () => {
 				suite('• tools is not set', () => {
 					test('• ask mode', async () => {
 						const test = createTest(
-							createURI('/absolute/folder/and/a/filename.txt'),
+							URI.file('/absolute/folder/and/a/filename.txt'),
 							[
 					/* 01 */"---",
 					/* 02 */"description: ['my prompt', 'description.']",
@@ -831,7 +875,7 @@ suite('TextModelPromptParser', () => {
 
 					test('• edit mode', async () => {
 						const test = createTest(
-							createURI('/absolute/folder/and/a/filename.txt'),
+							URI.file('/absolute/folder/and/a/filename.txt'),
 							[
 					/* 01 */"---",
 					/* 02 */"description: my prompt description. \t\t  \t\t   ",
@@ -887,7 +931,7 @@ suite('TextModelPromptParser', () => {
 
 					test('• agent mode', async () => {
 						const test = createTest(
-							createURI('/absolute/folder/and/a/filename.txt'),
+							URI.file('/absolute/folder/and/a/filename.txt'),
 							[
 					/* 01 */"---",
 					/* 02 */"mode: \"agent\"",
@@ -921,7 +965,7 @@ suite('TextModelPromptParser', () => {
 
 					test('• no mode', async () => {
 						const test = createTest(
-							createURI('/absolute/folder/and/a/filename.txt'),
+							URI.file('/absolute/folder/and/a/filename.txt'),
 							[
 					/* 01 */"---",
 					/* 02 */"description: 'My prompt.'",
@@ -959,7 +1003,7 @@ suite('TextModelPromptParser', () => {
 
 	test('• gets disposed with the model', async () => {
 		const test = createTest(
-			createURI('/some/path/file.prompt.md'),
+			URI.file('/some/path/file.prompt.md'),
 			[
 				'line1',
 				'line2',
@@ -973,13 +1017,13 @@ suite('TextModelPromptParser', () => {
 		test.model.dispose();
 
 		assert(
-			test.parser.disposed,
+			test.parser.isDisposed,
 			'The parser should be disposed with its model.',
 		);
 	});
 
-	test('• toString() implementation', async () => {
-		const modelUri = createURI('/Users/legomushroom/repos/prompt-snippets/README.md');
+	test('• toString()', async () => {
+		const modelUri = URI.file('/Users/legomushroom/repos/prompt-snippets/README.md');
 		const test = createTest(
 			modelUri,
 			[

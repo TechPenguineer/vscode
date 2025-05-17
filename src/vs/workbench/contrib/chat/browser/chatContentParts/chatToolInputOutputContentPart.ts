@@ -4,13 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as dom from '../../../../../base/browser/dom.js';
-import { Button } from '../../../../../base/browser/ui/button/button.js';
+import { ButtonWithIcon } from '../../../../../base/browser/ui/button/button.js';
 import { Codicon } from '../../../../../base/common/codicons.js';
 import { Emitter } from '../../../../../base/common/event.js';
 import { IMarkdownString } from '../../../../../base/common/htmlContent.js';
 import { Disposable } from '../../../../../base/common/lifecycle.js';
 import { autorun, ISettableObservable, observableValue } from '../../../../../base/common/observable.js';
 import { ThemeIcon } from '../../../../../base/common/themables.js';
+import { generateUuid } from '../../../../../base/common/uuid.js';
 import { MarkdownRenderer } from '../../../../../editor/browser/widget/markdownRenderer/browser/markdownRenderer.js';
 import { ITextModel } from '../../../../../editor/common/model.js';
 import { localize } from '../../../../../nls.js';
@@ -18,23 +19,32 @@ import { IContextKeyService } from '../../../../../platform/contextkey/common/co
 import { IInstantiationService } from '../../../../../platform/instantiation/common/instantiation.js';
 import { IChatRendererContent } from '../../common/chatViewModel.js';
 import { ChatTreeItem, IChatCodeBlockInfo } from '../chat.js';
+import { getAttachableImageExtension } from '../chatAttachmentResolve.js';
 import { CodeBlockPart, ICodeBlockData, ICodeBlockRenderOptions } from '../codeBlockPart.js';
+import { ChatAttachmentsContentPart } from './chatAttachmentsContentPart.js';
 import { IDisposableReference } from './chatCollections.js';
 import { ChatQueryTitlePart } from './chatConfirmationWidget.js';
 import { IChatContentPartRenderContext } from './chatContentParts.js';
 import { EditorPool } from './chatMarkdownContentPart.js';
 
 export interface IChatCollapsibleIOCodePart {
+	kind: 'code';
 	textModel: ITextModel;
 	languageId: string;
 	options: ICodeBlockRenderOptions;
 	codeBlockInfo: IChatCodeBlockInfo;
 }
 
+export interface IChatCollapsibleIODataPart {
+	kind: 'data';
+	value: Uint8Array;
+	mimeType: string;
+}
+
 export interface IChatCollapsibleInputData extends IChatCollapsibleIOCodePart { }
 export interface IChatCollapsibleOutputData {
 	// todo: show images etc. here
-	parts: IChatCollapsibleIOCodePart[];
+	parts: (IChatCollapsibleIOCodePart | IChatCollapsibleIODataPart)[];
 }
 
 export class ChatCollapsibleInputOutputContentPart extends Disposable {
@@ -72,41 +82,40 @@ export class ChatCollapsibleInputOutputContentPart extends Disposable {
 		isError: boolean,
 		initiallyExpanded: boolean,
 		@IContextKeyService private readonly contextKeyService: IContextKeyService,
-		@IInstantiationService instantiationService: IInstantiationService,
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 	) {
 		super();
 
-		const elements = dom.h('.chat-confirmation-widget@root', [
-			dom.h('.chat-confirmation-widget-title.expandable@title', [
-				dom.h('.chat-confirmation-widget-expando@expando'),
-			]),
-			dom.h('.chat-confirmation-widget-message@message'),
-		]);
+		const titleEl = dom.h('.chat-confirmation-widget-title-inner');
+		const iconEl = dom.h('.chat-confirmation-widget-title-icon');
+		const elements = dom.h('.chat-confirmation-widget');
 		this.domNode = elements.root;
 
-		const titlePart = this._titlePart = this._register(instantiationService.createInstance(
+		const titlePart = this._titlePart = this._register(_instantiationService.createInstance(
 			ChatQueryTitlePart,
-			elements.title,
+			titleEl.root,
 			title,
 			subtitle,
-			instantiationService.createInstance(MarkdownRenderer, {}),
+			_instantiationService.createInstance(MarkdownRenderer, {}),
 		));
-
 		this._register(titlePart.onDidChangeHeight(() => this._onDidChangeHeight.fire()));
+
 		const spacer = document.createElement('span');
 		spacer.style.flexGrow = '1';
-		elements.title.appendChild(spacer);
+
+		const btn = this._register(new ButtonWithIcon(elements.root, {}));
+		btn.element.classList.add('chat-confirmation-widget-title', 'monaco-text-button');
+		btn.labelElement.append(titleEl.root, iconEl.root);
+
 		const check = dom.h(isError
 			? ThemeIcon.asCSSSelector(Codicon.error)
 			: output
 				? ThemeIcon.asCSSSelector(Codicon.check)
 				: ThemeIcon.asCSSSelector(ThemeIcon.modify(Codicon.loading, 'spin'))
 		);
-		elements.title.appendChild(check.root);
+		iconEl.root.appendChild(check.root);
 
 		const expanded = this._expanded = observableValue(this, initiallyExpanded);
-		const btn = this._register(new Button(elements.expando, {}));
-
 		this._register(autorun(r => {
 			const value = expanded.read(r);
 			btn.icon = value ? Codicon.chevronDown : Codicon.chevronRight;
@@ -123,9 +132,10 @@ export class ChatCollapsibleInputOutputContentPart extends Disposable {
 		};
 
 		this._register(btn.onDidClick(toggle));
-		this._register(dom.addDisposableListener(elements.title, dom.EventType.CLICK, toggle));
 
-		elements.message.appendChild(this.createMessageContents());
+		const message = dom.h('.chat-confirmation-widget-message');
+		message.root.appendChild(this.createMessageContents());
+		elements.root.appendChild(message.root);
 	}
 
 	private createMessageContents() {
@@ -147,7 +157,17 @@ export class ChatCollapsibleInputOutputContentPart extends Disposable {
 		} else {
 			contents.outputTitle.textContent = localize('chat.output', "Output");
 			for (const part of output.parts) {
-				this.addCodeBlock(part, contents.output);
+				if (part.kind === 'data' && getAttachableImageExtension(part.mimeType)) {
+					const n = this._register(this._instantiationService.createInstance(
+						ChatAttachmentsContentPart,
+						[{ kind: 'image', id: generateUuid(), name: `image.${getAttachableImageExtension(part.mimeType)}`, value: part.value, mimeType: part.mimeType, isURL: false }],
+						undefined,
+						undefined,
+					));
+					contents.output.appendChild(n.domNode!);
+				} else if (part.kind === 'code') {
+					this.addCodeBlock(part, contents.output);
+				}
 			}
 		}
 

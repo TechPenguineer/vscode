@@ -183,7 +183,6 @@ import { IHoverService } from '../../../platform/hover/browser/hover.js';
 import { NullHoverService } from '../../../platform/hover/test/browser/nullHoverService.js';
 import { IActionViewItemService, NullActionViewItemService } from '../../../platform/actions/browser/actionViewItemService.js';
 import { IMarkdownString } from '../../../base/common/htmlContent.js';
-import { IElementData } from '../../../platform/native/common/native.js';
 
 export function createFileEditorInput(instantiationService: IInstantiationService, resource: URI): FileEditorInput {
 	return instantiationService.createInstance(FileEditorInput, resource, undefined, undefined, undefined, undefined, undefined, undefined);
@@ -1579,7 +1578,6 @@ export class TestHostService implements IHostService {
 	async toggleFullScreen(): Promise<void> { }
 
 	async getScreenshot(rect?: IRectangle): Promise<VSBuffer | undefined> { return undefined; }
-	async getElementData(offsetX: number, offsetY: number, token: CancellationToken): Promise<IElementData | undefined> { return undefined; }
 
 	async getNativeWindowHandle(_windowId: number): Promise<VSBuffer | undefined> { return undefined; }
 
@@ -2207,6 +2205,7 @@ export class TestWorkbenchExtensionManagementService implements IWorkbenchExtens
 	onProfileAwareDidUpdateExtensionMetadata = Event.None;
 	onDidChangeProfile = Event.None;
 	onDidEnableExtensions = Event.None;
+	preferPreReleases = true;
 	installVSIX(location: URI, manifest: Readonly<IRelaxedExtensionManifest>, installOptions?: InstallOptions | undefined): Promise<ILocalExtension> {
 		throw new Error('Method not implemented.');
 	}
