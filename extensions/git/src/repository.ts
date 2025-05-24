@@ -1021,7 +1021,7 @@ export class Repository implements Disposable {
 	 * Quick diff label
 	 */
 	get label(): string {
-		return l10n.t('Git local changes (working tree)');
+		return l10n.t('Git Local Changes (Working Tree)');
 	}
 
 	provideOriginalResource(uri: Uri): Uri | undefined {
@@ -1105,9 +1105,9 @@ export class Repository implements Disposable {
 		return this.run(Operation.Log(showProgress), () => this.repository.log(options));
 	}
 
-	logFile(uri: Uri, options?: LogFileOptions): Promise<Commit[]> {
+	logFile(uri: Uri, options?: LogFileOptions, cancellationToken?: CancellationToken): Promise<Commit[]> {
 		// TODO: This probably needs per-uri granularity
-		return this.run(Operation.LogFile, () => this.repository.logFile(uri, options));
+		return this.run(Operation.LogFile, () => this.repository.logFile(uri, options, cancellationToken));
 	}
 
 	@throttle
@@ -1703,6 +1703,10 @@ export class Repository implements Disposable {
 
 	async getCommit(ref: string): Promise<Commit> {
 		return await this.repository.getCommit(ref);
+	}
+
+	async showCommit(ref: string): Promise<string> {
+		return await this.run(Operation.Show, () => this.repository.showCommit(ref));
 	}
 
 	async getEmptyTree(): Promise<string> {
@@ -2805,8 +2809,7 @@ export class Repository implements Disposable {
 }
 
 export class StagedResourceQuickDiffProvider implements QuickDiffProvider {
-	readonly visible: boolean = true;
-	readonly label = l10n.t('Git local changes (index)');
+	readonly label = l10n.t('Git Local Changes (Index)');
 
 	constructor(
 		private readonly _repository: Repository,
