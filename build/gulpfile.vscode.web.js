@@ -56,7 +56,7 @@ const vscodeWebResourceIncludes = [
 	'out-build/vs/editor/common/languages/injections/*.scm',
 
 	// Extension Host Worker
-	'out-build/vs/workbench/services/extensions/worker/webWorkerExtensionHostIframe.html',
+	'out-build/vs/workbench/services/extensions/worker/webWorkerExtensionHostIframe.html'
 ];
 exports.vscodeWebResourceIncludes = vscodeWebResourceIncludes;
 
@@ -152,7 +152,7 @@ function packageTask(sourceFolderName, destinationFolderName) {
 		const loader = gulp.src('build/loader.min', { base: 'build', dot: true }).pipe(rename('out/vs/loader.js')); // TODO@esm remove line when we stop supporting web-amd-esm-bridge
 
 		const sources = es.merge(src, extensions, loader)
-			.pipe(filter(['**', '!**/*.js.map'], { dot: true }))
+			.pipe(filter(['**', '!**/*.{js,css}.map'], { dot: true }))
 			// TODO@esm remove me once we stop supporting our web-esm-bridge
 			.pipe(es.through(function (file) {
 				if (file.relative === 'out/vs/workbench/workbench.web.main.internal.css') {
@@ -167,7 +167,7 @@ function packageTask(sourceFolderName, destinationFolderName) {
 
 		const name = product.nameShort;
 		const packageJsonStream = gulp.src(['remote/web/package.json'], { base: 'remote/web' })
-			.pipe(json({ name, version }));
+			.pipe(json({ name, version, type: 'module' }));
 
 		const license = gulp.src(['remote/LICENSE'], { base: 'remote', allowEmpty: true });
 

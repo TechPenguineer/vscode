@@ -6,7 +6,7 @@
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { Event } from '../../../../base/common/event.js';
 import { IDisposable } from '../../../../base/common/lifecycle.js';
-import { IObservable, IReader, ITransaction } from '../../../../base/common/observable.js';
+import { IObservable, IReader } from '../../../../base/common/observable.js';
 import { URI } from '../../../../base/common/uri.js';
 import { TextEdit } from '../../../../editor/common/languages.js';
 import { localize } from '../../../../nls.js';
@@ -70,9 +70,9 @@ export interface WorkingSetDisplayMetadata {
 }
 
 export interface IStreamingEdits {
-	pushText(edits: TextEdit[]): void;
-	pushNotebookCellText(cell: URI, edits: TextEdit[]): void;
-	pushNotebook(edits: ICellEditOperation[]): void;
+	pushText(edits: TextEdit[], isLastEdits: boolean): void;
+	pushNotebookCellText(cell: URI, edits: TextEdit[], isLastEdits: boolean): void;
+	pushNotebook(edits: ICellEditOperation[], isLastEdits: boolean): void;
 	/** Marks edits as done, idempotent */
 	complete(): void;
 }
@@ -215,8 +215,10 @@ export interface IModifiedFileEntry {
 	readonly lastModifyingResponse: IObservable<IChatResponseModel | undefined>;
 	readonly rewriteRatio: IObservable<number>;
 
-	accept(transaction: ITransaction | undefined): Promise<void>;
-	reject(transaction: ITransaction | undefined): Promise<void>;
+	readonly waitsForLastEdits: IObservable<boolean>;
+
+	accept(): Promise<void>;
+	reject(): Promise<void>;
 
 	reviewMode: IObservable<boolean>;
 	autoAcceptController: IObservable<{ total: number; remaining: number; cancel(): void } | undefined>;
