@@ -24,7 +24,9 @@ import { UntitledTextEditorInput } from '../../../services/untitled/common/untit
 import { createNotebookOutputVariableEntry, NOTEBOOK_CELL_OUTPUT_MIME_TYPE_LIST_FOR_CHAT_CONST } from '../../notebook/browser/contrib/chat/notebookChatUtils.js';
 import { getOutputViewModelFromId } from '../../notebook/browser/controller/cellOutputActions.js';
 import { getNotebookEditorFromEditorPane } from '../../notebook/browser/notebookBrowser.js';
-import { IChatRequestVariableEntry, IDiagnosticVariableEntry, IDiagnosticVariableEntryFilterData, ISymbolVariableEntry, OmittedState } from '../common/chatModel.js';
+import { CHAT_ATTACHABLE_IMAGE_MIME_TYPES, getAttachableImageExtension } from '../common/chatModel.js';
+import { IChatRequestVariableEntry, OmittedState, IDiagnosticVariableEntry, IDiagnosticVariableEntryFilterData, ISymbolVariableEntry, toPromptFileVariableEntry } from '../common/chatVariableEntries.js';
+import { getPromptsTypeForLanguageId } from '../common/promptSyntax/promptTypes.js';
 import { imageToHash } from './chatPasteProviders.js';
 import { resizeImage } from './imageUtils.js';
 
@@ -82,8 +84,11 @@ export async function resolveResourceAttachContext(resource: URI, isDirectory: b
 	let omittedState = OmittedState.NotOmitted;
 
 	if (!isDirectory) {
+
+		let languageId: string | undefined;
 		try {
 			const createdModel = await textModelService.createModelReference(resource);
+			languageId = createdModel.object.getLanguageId();
 			createdModel.dispose();
 		} catch {
 			omittedState = OmittedState.Full;
@@ -91,6 +96,9 @@ export async function resolveResourceAttachContext(resource: URI, isDirectory: b
 
 		if (/\.(svg)$/i.test(resource.path)) {
 			omittedState = OmittedState.Full;
+		}
+		if (languageId && getPromptsTypeForLanguageId(languageId)) {
+			return toPromptFileVariableEntry(resource, true);
 		}
 	}
 
@@ -114,19 +122,30 @@ export type ImageTransferData = {
 	mimeType?: string;
 	omittedState?: OmittedState;
 };
-const SUPPORTED_IMAGE_EXTENSIONS_REGEX = /\.(png|jpg|jpeg|gif|webp)$/i;
+const SUPPORTED_IMAGE_EXTENSIONS_REGEX = new RegExp(`\\.(${Object.keys(CHAT_ATTACHABLE_IMAGE_MIME_TYPES).join('|')})$`, 'i');
 
-export async function resolveImageEditorAttachContext(fileService: IFileService, dialogService: IDialogService, resource: URI, data?: VSBuffer): Promise<IChatRequestVariableEntry | undefined> {
+function getMimeTypeFromPath(match: RegExpExecArray): string | undefined {
+	const ext = match[1].toLowerCase();
+	return CHAT_ATTACHABLE_IMAGE_MIME_TYPES[ext];
+}
+
+export async function resolveImageEditorAttachContext(fileService: IFileService, dialogService: IDialogService, resource: URI, data?: VSBuffer, mimeType?: string): Promise<IChatRequestVariableEntry | undefined> {
 	if (!resource) {
 		return undefined;
 	}
 
-	const match = SUPPORTED_IMAGE_EXTENSIONS_REGEX.exec(resource.path);
-	if (!match) {
-		return undefined;
-	}
+	if (mimeType) {
+		if (!getAttachableImageExtension(mimeType)) {
+			return undefined;
+		}
+	} else {
+		const match = SUPPORTED_IMAGE_EXTENSIONS_REGEX.exec(resource.path);
+		if (!match) {
+			return undefined;
+		}
 
-	const mimeType = getMimeTypeFromPath(match);
+		mimeType = getMimeTypeFromPath(match);
+	}
 	const fileName = basename(resource);
 
 	let dataBuffer: VSBuffer | undefined;
@@ -178,19 +197,6 @@ export async function resolveImageAttachContext(images: ImageTransferData[]): Pr
 		omittedState: image.omittedState || OmittedState.NotOmitted,
 		references: image.resource ? [{ reference: image.resource, kind: 'reference' }] : []
 	})));
-}
-
-const MIME_TYPES: Record<string, string> = {
-	png: 'image/png',
-	jpg: 'image/jpeg',
-	jpeg: 'image/jpeg',
-	gif: 'image/gif',
-	webp: 'image/webp',
-};
-
-function getMimeTypeFromPath(match: RegExpExecArray): string | undefined {
-	const ext = match[1].toLowerCase();
-	return MIME_TYPES[ext];
 }
 
 // --- MARKERS ---
