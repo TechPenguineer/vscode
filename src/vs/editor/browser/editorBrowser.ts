@@ -9,7 +9,7 @@ import { IBoundarySashes } from '../../base/browser/ui/sash/sash.js';
 import { Event } from '../../base/common/event.js';
 import { IEditorConstructionOptions } from './config/editorConfiguration.js';
 import { ConfigurationChangedEvent, EditorLayoutInfo, EditorOption, FindComputedEditorOptionValueById, IComputedEditorOptions, IDiffEditorOptions, IEditorOptions, OverviewRulerPosition } from '../common/config/editorOptions.js';
-import { IDimension } from '../common/core/dimension.js';
+import { IDimension } from '../common/core/2d/dimension.js';
 import { IPosition, Position } from '../common/core/position.js';
 import { IRange, Range } from '../common/core/range.js';
 import { Selection } from '../common/core/selection.js';
@@ -25,6 +25,8 @@ import { OverviewRulerZone } from '../common/viewModel/overviewZoneManager.js';
 import { MenuId } from '../../platform/actions/common/actions.js';
 import { IContextKeyService } from '../../platform/contextkey/common/contextkey.js';
 import { ServicesAccessor } from '../../platform/instantiation/common/instantiation.js';
+import { TextEdit } from '../common/core/edits/textEdit.js';
+import { TextModelEditReason } from '../common/textModelEditReason.js';
 
 /**
  * A view zone is a full horizontal rectangle that 'pushes' text down.
@@ -988,6 +990,13 @@ export interface ICodeEditor extends editorCommon.IEditor {
 	 * @param endCursorState Cursor state after the edits were applied.
 	 */
 	executeEdits(source: string | null | undefined, edits: IIdentifiedSingleEditOperation[], endCursorState?: ICursorStateComputer | Selection[]): boolean;
+	/** @internal */
+	executeEdits(source: TextModelEditReason | undefined, edits: IIdentifiedSingleEditOperation[], endCursorState?: ICursorStateComputer | Selection[]): boolean;
+
+	/**
+	 * @internal
+	*/
+	edit(edit: TextEdit, reason: TextModelEditReason): void;
 
 	/**
 	 * Execute multiple (concomitant) commands on the editor.
@@ -1078,7 +1087,7 @@ export interface ICodeEditor extends editorCommon.IEditor {
 	/**
 	 * Get the line height for the line number.
 	 */
-	getLineHeightForLineNumber(lineNumber: number): number;
+	getLineHeightForPosition(position: IPosition): number;
 
 	/**
 	 * Set the model ranges that will be hidden in the view.

@@ -50,7 +50,7 @@ import { ILayoutService } from '../../../platform/layout/browser/layoutService.j
 import { StandaloneServicesNLS } from '../../common/standaloneStrings.js';
 import { basename } from '../../../base/common/resources.js';
 import { ICodeEditorService } from '../../browser/services/codeEditorService.js';
-import { ConsoleLogger, ILogService } from '../../../platform/log/common/log.js';
+import { ConsoleLogger, ILoggerService, ILogService, NullLoggerService } from '../../../platform/log/common/log.js';
 import { IWorkspaceTrustManagementService, IWorkspaceTrustTransitionParticipant, IWorkspaceTrustUriInfo } from '../../../platform/workspace/common/workspaceTrust.js';
 import { EditorOption } from '../../common/config/editorOptions.js';
 import { ICodeEditor, IDiffEditor } from '../../browser/editorBrowser.js';
@@ -96,9 +96,9 @@ import { onUnexpectedError } from '../../../base/common/errors.js';
 import { ExtensionKind, IEnvironmentService, IExtensionHostDebugParams } from '../../../platform/environment/common/environment.js';
 import { mainWindow } from '../../../base/browser/window.js';
 import { ResourceMap } from '../../../base/common/map.js';
-import { ITreeSitterParserService } from '../../common/services/treeSitterParserService.js';
-import { StandaloneTreeSitterParserService } from './standaloneTreeSitterService.js';
 import { IWebWorkerDescriptor } from '../../../base/browser/webWorkerFactory.js';
+import { ITreeSitterLibraryService } from '../../common/services/treeSitter/treeSitterLibraryService.js';
+import { StandaloneTreeSitterLibraryService } from './standaloneTreeSitterLibraryService.js';
 
 class SimpleModel implements IResolvedTextEditorModel {
 
@@ -307,10 +307,6 @@ class StandaloneDialogService implements IDialogService {
 }
 
 export class StandaloneNotificationService implements INotificationService {
-
-	readonly onDidAddNotification: Event<INotification> = Event.None;
-
-	readonly onDidRemoveNotification: Event<INotification> = Event.None;
 
 	readonly onDidChangeFilter: Event<void> = Event.None;
 
@@ -595,8 +591,8 @@ export class StandaloneKeybindingService extends AbstractKeybindingService {
 		return '';
 	}
 
-	public registerSchemaContribution(contribution: KeybindingsSchemaContribution): void {
-		// noop
+	public registerSchemaContribution(contribution: KeybindingsSchemaContribution): IDisposable {
+		return Disposable.None;
 	}
 
 	/**
@@ -1132,6 +1128,7 @@ export interface IEditorOverrideServices {
 	[index: string]: any;
 }
 
+
 registerSingleton(ILogService, StandaloneLogService, InstantiationType.Eager);
 registerSingleton(IConfigurationService, StandaloneConfigurationService, InstantiationType.Eager);
 registerSingleton(ITextResourceConfigurationService, StandaloneResourceConfigurationService, InstantiationType.Eager);
@@ -1166,7 +1163,8 @@ registerSingleton(IClipboardService, BrowserClipboardService, InstantiationType.
 registerSingleton(IContextMenuService, StandaloneContextMenuService, InstantiationType.Eager);
 registerSingleton(IMenuService, MenuService, InstantiationType.Eager);
 registerSingleton(IAccessibilitySignalService, StandaloneAccessbilitySignalService, InstantiationType.Eager);
-registerSingleton(ITreeSitterParserService, StandaloneTreeSitterParserService, InstantiationType.Eager);
+registerSingleton(ITreeSitterLibraryService, StandaloneTreeSitterLibraryService, InstantiationType.Eager);
+registerSingleton(ILoggerService, NullLoggerService, InstantiationType.Eager);
 
 /**
  * We don't want to eagerly instantiate services because embedders get a one time chance

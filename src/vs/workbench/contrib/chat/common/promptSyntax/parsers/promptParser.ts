@@ -9,23 +9,24 @@ import { IPromptContentsProvider } from '../contentProviders/types.js';
 import { ILogService } from '../../../../../../platform/log/common/log.js';
 import { BasePromptParser, IPromptParserOptions } from './basePromptParser.js';
 import { IModelService } from '../../../../../../editor/common/services/model.js';
-import { isUntitled } from '../../../../../../platform/prompts/common/constants.js';
 import { TextModelContentsProvider } from '../contentProviders/textModelContentsProvider.js';
 import { FilePromptContentProvider } from '../contentProviders/filePromptContentsProvider.js';
 import { IWorkspaceContextService } from '../../../../../../platform/workspace/common/workspace.js';
 import { IInstantiationService } from '../../../../../../platform/instantiation/common/instantiation.js';
+import { Schemas } from '../../../../../../base/common/network.js';
+import { IPromptContentsProviderOptions } from '../contentProviders/promptContentsProviderBase.js';
 
 /**
  * Get prompt contents provider object based on the prompt type.
  */
-const getContentsProvider = (
+function getContentsProvider(
 	uri: URI,
-	options: Partial<IPromptParserOptions>,
+	options: IPromptContentsProviderOptions,
 	modelService: IModelService,
-	instaService: IInstantiationService,
-): IPromptContentsProvider => {
+	instaService: IInstantiationService
+): IPromptContentsProvider {
 	// use text model contents provider for `untitled` documents
-	if (isUntitled(uri)) {
+	if (uri.scheme === Schemas.untitled) {
 		const model = modelService.getModel(uri);
 
 		assertDefined(
@@ -39,7 +40,7 @@ const getContentsProvider = (
 
 	return instaService
 		.createInstance(FilePromptContentProvider, uri, options);
-};
+}
 
 /**
  * General prompt parser class that automatically infers a prompt
@@ -53,7 +54,7 @@ export class PromptParser extends BasePromptParser<IPromptContentsProvider> {
 
 	constructor(
 		uri: URI,
-		options: Partial<IPromptParserOptions> = {},
+		options: IPromptParserOptions,
 		@ILogService logService: ILogService,
 		@IModelService modelService: IModelService,
 		@IInstantiationService instaService: IInstantiationService,
@@ -75,7 +76,7 @@ export class PromptParser extends BasePromptParser<IPromptContentsProvider> {
 	/**
 	 * Returns a string representation of this object.
 	 */
-	public override toString() {
+	public override toString(): string {
 		const { sourceName } = this.contentsProvider;
 
 		return `prompt-parser:${sourceName}:${this.uri.path}`;
